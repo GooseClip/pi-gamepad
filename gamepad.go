@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/mousybusiness/pi-gamepad/hid"
+	"github.com/gooseclip/pi-gamepad/hid"
 	"log"
 	"os"
 	"strings"
