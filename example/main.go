@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	. "github.com/mousybusiness/pi-gamepad"
+	. "github.com/gooseclip/pi-gamepad"
 	"log"
 	"os"
 	"os/signal"

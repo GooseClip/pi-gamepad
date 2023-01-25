@@ -35,7 +35,7 @@ const (
 	r2Axis        = 5
 )
 
-var ExpectedName = "Microsoft X-Box 360 pad"
+var KnownNames []string = []string{"Microsoft X-Box 360 pad", "SHANWAN Android Gamepad"}
 
 type ButtonPosition int
 
@@ -429,7 +429,12 @@ func isGamepad(idx int) bool {
 		return false
 	}
 	name := strings.TrimSpace(string(d))
-	return name == ExpectedName // The name PiHut gamepad resolves as
+	for _, n := range KnownNames {
+		if name == n {
+			return true
+		}
+	}
+	return false
 }
 
 func (g *Gamepad) emitDirection(handler directionHandler, xIndex, yIndex int) error {
