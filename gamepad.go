@@ -11,31 +11,133 @@ import (
 	"time"
 )
 
-const (
-	CrossButton    uint8 = iota // 0 - X
-	CircleButton                // 1 - ()
-	SquareButton                // 2 - []
-	TriangleButton              // 3 - /\
-	L1Button                    // 4 - L1
-	R1Button                    // 5 - L2
-	SelectButton                // 6 - Select
-	StartButton                 // 7 - Start
-	AnalogButton                // 8 - Analog
-	LeftJoyButton               // 9 - Left joystick click
-	RightJoyButton              // 10 - Right joystick click
+type Resolved int
 
-	// Internal axis mapping
-	dPadXAxis     = 6
-	dPadYAxis     = 7
-	leftJoyXAxis  = 0
-	leftJoyYAxis  = 1
-	rightJoyXAxis = 3
-	rightJoyYAxis = 4
-	l2Axis        = 2
-	r2Axis        = 5
+const (
+	// Buttons
+	CrossButton    Resolved = iota //  X
+	CircleButton                   // ()
+	SquareButton                   // []
+	TriangleButton                 // /\
+	L1Button
+	R1Button
+	SelectButton
+	StartButton
+	AnalogButton
+	LeftJoyButton
+	RightJoyButton
+	// Axis
+	DPadXAxis
+	DPadYAxis
+	LeftJoyXAxis
+	LeftJoyYAxis
+	RightJoyXAxis
+	RightJoyYAxis
+	L2Axis
+	R2Axis
 )
 
-var KnownNames []string = []string{"Microsoft X-Box 360 pad", "SHANWAN Android Gamepad"}
+//var KnownNames []string = []string{"Microsoft X-Box 360 pad", "SHANWAN Android Gamepad"}
+
+const (
+	InputTypeButton int = iota
+	InputTypeAxis
+)
+
+type Input struct {
+	inputType  int
+	inputValue uint8
+}
+
+type InputMapping map[Input]Resolved
+
+type DriverName string
+
+var DriverMapping = map[DriverName]InputMapping{
+	// Ubuntu 22.04 arm64
+	"Microsoft X-Box 360 pad": {
+		//CrossButton:               0,
+		Input{InputTypeButton, 0}: CrossButton,
+		//CircleButton:              1,
+		Input{InputTypeButton, 1}: CircleButton,
+		//SquareButton:              2,
+		Input{InputTypeButton, 2}: SquareButton,
+		//TriangleButton:            3,
+		Input{InputTypeButton, 3}: TriangleButton,
+		//L1Button:                  4,
+		Input{InputTypeButton, 4}: L1Button,
+		//R1Button:                  5,
+		Input{InputTypeButton, 5}: R1Button,
+		//SelectButton:              6,
+		Input{InputTypeButton, 6}: SelectButton,
+		//StartButton:               7,
+		Input{InputTypeButton, 7}: StartButton,
+		//AnalogButton:              8,
+		Input{InputTypeButton, 8}: AnalogButton,
+		//LeftJoyButton:             9,
+		Input{InputTypeButton, 9}: LeftJoyButton,
+		//RightJoyButton:            10,
+		Input{InputTypeButton, 10}: RightJoyButton,
+		//DPadXAxis:                 6,
+		Input{InputTypeAxis, 6}: DPadXAxis,
+		//DPadYAxis:                 7,
+		Input{InputTypeAxis, 7}: DPadYAxis,
+		//LeftJoyXAxis:              0,
+		Input{InputTypeAxis, 0}: LeftJoyXAxis,
+		//LeftJoyYAxis:              1,
+		Input{InputTypeAxis, 1}: LeftJoyYAxis,
+		//RightJoyXAxis:             3,
+		Input{InputTypeAxis, 3}: RightJoyXAxis,
+		//RightJoyYAxis:             4,
+		Input{InputTypeAxis, 4}: RightJoyYAxis,
+		//L2Axis:                    2,
+		Input{InputTypeAxis, 2}: L2Axis,
+		//R2Axis:                    5,
+		Input{InputTypeAxis, 5}: R2Axis,
+	},
+
+	// Raspberry pi 4 - Ubuntu 22.10
+	"SHANWAN Android Gamepad": {
+		//CrossButton:               0,
+		Input{InputTypeButton, 0}: CrossButton,
+		//CircleButton:              1,
+		Input{InputTypeButton, 1}: CircleButton,
+		//SquareButton:              2,
+		Input{InputTypeButton, 2}: SquareButton,
+		//TriangleButton:            3,
+		Input{InputTypeButton, 3}: TriangleButton,
+		//L1Button:                  4,
+		Input{InputTypeButton, 4}: L1Button,
+		//R1Button:                  5,
+		Input{InputTypeButton, 5}: R1Button,
+		//SelectButton:              6,
+		Input{InputTypeButton, 6}: SelectButton,
+		//StartButton:               7,
+		Input{InputTypeButton, 7}: StartButton,
+		//AnalogButton:              8,
+		Input{InputTypeButton, 8}: AnalogButton,
+		//LeftJoyButton:             9,
+		Input{InputTypeButton, 9}: LeftJoyButton,
+		//RightJoyButton:            10,
+		Input{InputTypeButton, 10}: RightJoyButton,
+		//DPadXAxis:                 6,
+		Input{InputTypeAxis, 6}: DPadXAxis,
+		//DPadYAxis:                 7,
+		Input{InputTypeAxis, 7}: DPadYAxis,
+		//LeftJoyXAxis:              0,
+		Input{InputTypeAxis, 0}: LeftJoyXAxis,
+		//LeftJoyYAxis:              1,
+		Input{InputTypeAxis, 1}: LeftJoyYAxis,
+		//RightJoyXAxis:             3,
+		Input{InputTypeAxis, 3}: RightJoyXAxis,
+		//RightJoyYAxis:             4,
+		Input{InputTypeAxis, 4}: RightJoyYAxis,
+		//L2Axis:                    2,
+		Input{InputTypeAxis, 2}: L2Axis,
+		//R2Axis:                    5,
+		Input{InputTypeAxis, 5}: R2Axis,
+	},
+}
 
 type ButtonPosition int
 
@@ -77,9 +179,10 @@ type Gamepad struct {
 	cancel        context.CancelFunc
 	device        *hid.HID
 	invertY       bool
-	axisCache     map[int]int
+	axisCache     map[Resolved]int
 	clickDuration time.Duration
 	holdDuration  time.Duration
+	inputMapping  InputMapping
 
 	// Movement
 	dpadHandler     directionHandler
@@ -121,16 +224,19 @@ type buttonHandler func(event ButtonEvent)
 type option func(*Gamepad)
 
 func NewGamepad(ctx context.Context, opts ...option) (*Gamepad, error) {
-
 	ctx, cancel := context.WithCancel(ctx)
 
+	var driver DriverName
 	deviceIndex := -1
 	for i := 0; i < 5; i++ {
 		exists := hid.DeviceExists(i)
-		if exists && isGamepad(i) {
-			log.Printf("Found device %v\n", i)
-			deviceIndex = i
-			break
+		if exists {
+			if n, ok := isGamepad(i); ok {
+				log.Printf("Found device %v\n", i)
+				driver = n
+				deviceIndex = i
+				break
+			}
 		}
 	}
 	if deviceIndex == -1 {
@@ -148,9 +254,10 @@ func NewGamepad(ctx context.Context, opts ...option) (*Gamepad, error) {
 		ctx:           ctx,
 		cancel:        cancel,
 		device:        device,
-		axisCache:     make(map[int]int),
+		axisCache:     make(map[Resolved]int),
 		clickDuration: defaultClickDuration,
 		holdDuration:  defaultHoldDuration,
+		inputMapping:  DriverMapping[driver],
 	}
 
 	for _, o := range opts {
@@ -158,7 +265,7 @@ func NewGamepad(ctx context.Context, opts ...option) (*Gamepad, error) {
 	}
 
 	// Initialize axis cache with zero values
-	for i := 0; i < 8; i++ {
+	for i := DPadXAxis; i <= R2Axis; i++ {
 		g.axisCache[i] = 0
 	}
 
@@ -323,7 +430,11 @@ func (g *Gamepad) handleEvents() {
 				pos = DownPosition
 			}
 
-			switch event.Button {
+			resolved := g.inputMapping[Input{
+				inputType:  InputTypeButton,
+				inputValue: event.Button,
+			}]
+			switch resolved {
 			case CrossButton:
 				if err := g.processButton(g.crossBtn, pos); err != nil {
 					log.Println(err)
@@ -373,24 +484,29 @@ func (g *Gamepad) handleEvents() {
 			}
 
 		case event := <-g.device.OnAxis():
-			g.axisCache[int(event.Axis)] = int(event.Value)
+			g.axisCache[Resolved(event.Axis)] = int(event.Value)
 
-			if event.Axis == dPadXAxis || event.Axis == dPadYAxis {
-				if err := g.emitDirection(g.dpadHandler, dPadXAxis, dPadYAxis); err != nil {
+			resolved := g.inputMapping[Input{
+				inputType:  InputTypeAxis,
+				inputValue: event.Axis,
+			}]
+
+			if resolved == DPadXAxis || resolved == DPadYAxis {
+				if err := g.emitDirection(g.dpadHandler, DPadXAxis, DPadYAxis); err != nil {
 					log.Println(err)
 				}
 				continue
 			}
 
-			if event.Axis == leftJoyXAxis || event.Axis == leftJoyYAxis {
-				if err := g.emitDirection(g.leftJoyHandler, leftJoyXAxis, leftJoyYAxis); err != nil {
+			if resolved == LeftJoyXAxis || resolved == LeftJoyYAxis {
+				if err := g.emitDirection(g.leftJoyHandler, LeftJoyXAxis, LeftJoyYAxis); err != nil {
 					log.Println(err)
 				}
 				continue
 			}
 
-			if event.Axis == rightJoyXAxis || event.Axis == rightJoyYAxis {
-				if err := g.emitDirection(g.rightJoyHandler, rightJoyXAxis, rightJoyYAxis); err != nil {
+			if resolved == RightJoyXAxis || resolved == RightJoyYAxis {
+				if err := g.emitDirection(g.rightJoyHandler, RightJoyXAxis, RightJoyYAxis); err != nil {
 					log.Println(err)
 				}
 				continue
@@ -404,14 +520,14 @@ func (g *Gamepad) handleEvents() {
 				pos = DownPosition
 			}
 
-			if event.Axis == l2Axis {
+			if resolved == L2Axis {
 				if err := g.processButton(g.l2Btn, pos); err != nil {
 					log.Println(err)
 				}
 				continue
 			}
 
-			if event.Axis == r2Axis {
+			if resolved == R2Axis {
 				if err := g.processButton(g.r2Btn, pos); err != nil {
 					log.Println(err)
 				}
@@ -422,22 +538,22 @@ func (g *Gamepad) handleEvents() {
 	}
 }
 
-func isGamepad(idx int) bool {
+func isGamepad(idx int) (DriverName, bool) {
 	d, err := os.ReadFile(fmt.Sprintf("/sys/class/input/js%v/device/name", idx))
 	if err != nil {
 		log.Printf("Error checking device name, err: %v", err)
-		return false
+		return "", false
 	}
 	name := strings.TrimSpace(string(d))
-	for _, n := range KnownNames {
-		if name == n {
-			return true
+	for k, _ := range DriverMapping {
+		if name == string(k) {
+			return k, true
 		}
 	}
-	return false
+	return "", false
 }
 
-func (g *Gamepad) emitDirection(handler directionHandler, xIndex, yIndex int) error {
+func (g *Gamepad) emitDirection(handler directionHandler, xIndex, yIndex Resolved) error {
 	if handler == nil {
 		return errors.New("handler not assigned")
 	}
