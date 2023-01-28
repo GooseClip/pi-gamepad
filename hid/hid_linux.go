@@ -60,10 +60,8 @@ func (h *HID) mapInitalEvents() {
 
 		switch evt.Type {
 		case 0x81:
-			h.registerButton(evt.Index)
 			lastTimestamp = evt.Time
 		case 0x82:
-			h.registerAxis(evt.Index)
 			lastTimestamp = evt.Time
 		default:
 			// Receiving the first non 0x81 or 0x82 event is our signal that populating is done. Forward this event as a real event.

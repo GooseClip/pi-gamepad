@@ -183,6 +183,7 @@ type Gamepad struct {
 	clickDuration time.Duration
 	holdDuration  time.Duration
 	inputMapping  InputMapping
+	debug         bool
 
 	// Movement
 	dpadHandler     directionHandler
@@ -232,7 +233,6 @@ func NewGamepad(ctx context.Context, opts ...option) (*Gamepad, error) {
 		exists := hid.DeviceExists(i)
 		if exists {
 			if n, ok := isGamepad(i); ok {
-				log.Printf("Found device %v\n", i)
 				driver = n
 				deviceIndex = i
 				break
@@ -247,7 +247,7 @@ func NewGamepad(ctx context.Context, opts ...option) (*Gamepad, error) {
 	device := hid.Connect(ctx, deviceIndex)
 	if device == nil {
 		cancel()
-		return nil, fmt.Errorf("Failed to connect with device: js%v", deviceIndex)
+		return nil, fmt.Errorf("failed to connect with device: js%v", deviceIndex)
 	}
 
 	g := &Gamepad{
@@ -271,9 +271,13 @@ func NewGamepad(ctx context.Context, opts ...option) (*Gamepad, error) {
 
 	go g.handleEvents()
 
-	log.Println("Max value is", hid.MaxValue)
-
 	return g, nil
+}
+
+func WithDebug() option {
+	return func(gamepad *Gamepad) {
+		gamepad.debug = true
+	}
 }
 
 func WithInvertedY() option {
@@ -418,11 +422,16 @@ func (g *Gamepad) OnTriangle(h buttonHandler, events ...ButtonEvent) {
 	}
 }
 
+func (g *Gamepad) debugLn(s string) {
+	if g.debug {
+		log.Println(s)
+	}
+}
+
 func (g *Gamepad) handleEvents() {
 	for {
 		select {
 		case event := <-g.device.OnButton():
-
 			var pos ButtonPosition
 			if event.Value <= 0 {
 				pos = UpPosition
@@ -430,89 +439,102 @@ func (g *Gamepad) handleEvents() {
 				pos = DownPosition
 			}
 
-			resolved := g.inputMapping[Input{
+			resolved, ok := g.inputMapping[Input{
 				inputType:  InputTypeButton,
 				inputValue: event.Button,
 			}]
+			if !ok {
+				g.debugLn(fmt.Sprintf("Button unknown: %v\n", event.Button))
+				continue
+			}
 
-			fmt.Printf("Button, input: %v, resolved as: %v\n", event.Button, resolved)
+			if g.debug {
+				g.debugLn(fmt.Sprintf("Button, input: %v, resolved as: %v\n", event.Button, resolved))
+			}
+
 			switch resolved {
 			case CrossButton:
 				if err := g.processButton(g.crossBtn, pos); err != nil {
-					log.Println(err)
+					g.debugLn(err.Error())
 				}
 			case CircleButton:
 				if err := g.processButton(g.circleBtn, pos); err != nil {
-					log.Println(err)
+					g.debugLn(err.Error())
 				}
 			case SquareButton:
 				if err := g.processButton(g.squareBtn, pos); err != nil {
-					log.Println(err)
+					g.debugLn(err.Error())
 				}
 			case TriangleButton:
 				if err := g.processButton(g.triangleBtn, pos); err != nil {
-					log.Println(err)
+					g.debugLn(err.Error())
 				}
 			case L1Button:
 				if err := g.processButton(g.l1Btn, pos); err != nil {
-					log.Println(err)
+					g.debugLn(err.Error())
 				}
 			case R1Button:
 				if err := g.processButton(g.r1Btn, pos); err != nil {
-					log.Println(err)
+					g.debugLn(err.Error())
 				}
 			case SelectButton:
 				if err := g.processButton(g.selectBtn, pos); err != nil {
-					log.Println(err)
+					g.debugLn(err.Error())
 				}
 			case StartButton:
 				if err := g.processButton(g.startBtn, pos); err != nil {
-					log.Println(err)
+					g.debugLn(err.Error())
 				}
 			case AnalogButton:
 				if err := g.processButton(g.analogBtn, pos); err != nil {
-					log.Println(err)
+					g.debugLn(err.Error())
 				}
 			case LeftJoyButton:
 				if err := g.processButton(g.ljBtn, pos); err != nil {
-					log.Println(err)
+					g.debugLn(err.Error())
 				}
 			case RightJoyButton:
 				if err := g.processButton(g.rjBtn, pos); err != nil {
-					log.Println(err)
+					g.debugLn(err.Error())
 				}
 			default:
-				log.Printf("Button event, button: %v, value: %v, when: %v\n", event.Button, event.Value, event.When)
+				g.debugLn(fmt.Sprintf("Button event, button: %v, value: %v, when: %v\n", event.Button, event.Value, event.When))
+
 			}
 
 		case event := <-g.device.OnAxis():
-
-			resolved := g.inputMapping[Input{
+			resolved, ok := g.inputMapping[Input{
 				inputType:  InputTypeAxis,
 				inputValue: event.Axis,
 			}]
+			if !ok {
+				g.debugLn(fmt.Sprintf("Button unknown: %v\n", event.Axis))
+				continue
+			}
+
+			g.debugLn(fmt.Sprintf("Axis, input: %v, resolved as: %v\n", event.Axis, resolved))
 
 			g.axisCache[resolved] = int(event.Value)
 
-			fmt.Printf("Axis, input: %v, resolved as: %v\n", event.Axis, resolved)
-
 			if resolved == DPadXAxis || resolved == DPadYAxis {
 				if err := g.emitDirection(g.dpadHandler, DPadXAxis, DPadYAxis); err != nil {
-					log.Println(err)
+					g.debugLn(err.Error())
 				}
 				continue
 			}
 
 			if resolved == LeftJoyXAxis || resolved == LeftJoyYAxis {
 				if err := g.emitDirection(g.leftJoyHandler, LeftJoyXAxis, LeftJoyYAxis); err != nil {
-					log.Println(err)
+					g.debugLn(err.Error())
 				}
 				continue
 			}
 
 			if resolved == RightJoyXAxis || resolved == RightJoyYAxis {
 				if err := g.emitDirection(g.rightJoyHandler, RightJoyXAxis, RightJoyYAxis); err != nil {
-					log.Println(err)
+					if g.debug {
+						g.debugLn(err.Error())
+					}
 				}
 				continue
 			}
@@ -527,18 +549,19 @@ func (g *Gamepad) handleEvents() {
 
 			if resolved == L2Axis {
 				if err := g.processButton(g.l2Btn, pos); err != nil {
-					log.Println(err)
+					g.debugLn(err.Error())
 				}
 				continue
 			}
 
 			if resolved == R2Axis {
 				if err := g.processButton(g.r2Btn, pos); err != nil {
-					log.Println(err)
+					g.debugLn(err.Error())
 				}
 				continue
 			}
-			log.Printf("Axis event, axis: %v, value: %v, when: %v\n", event.Axis, event.Value, event.When)
+
+			g.debugLn(fmt.Sprintf("Axis event, axis: %v, value: %v, when: %v\n", event.Axis, event.Value, event.When))
 		}
 	}
 }
@@ -623,7 +646,7 @@ func (g *Gamepad) processButton(btn *button, pos ButtonPosition) error {
 			if time.Since(btn.downTime) < g.clickDuration {
 				btn.handler(ClickEvent)
 			} else {
-				log.Printf("Invalid click, elapsed: %v, click dur: %v\n", time.Since(btn.downTime), g.clickDuration)
+				g.debugLn(fmt.Sprintf("Invalid click, elapsed: %v, click dur: %v\n", time.Since(btn.downTime), g.clickDuration))
 			}
 		}
 	}

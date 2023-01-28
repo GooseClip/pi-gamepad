@@ -49,7 +49,6 @@ func (h *HID) handleEvents() {
 			return
 		case evt, ok := <-h.osEventsCh:
 			if !ok {
-				log.Println("osEventsCh closed")
 				return
 			}
 
@@ -85,12 +84,4 @@ func (h *HID) OnButton() <-chan ButtonEvent {
 
 func (h *HID) OnAxis() <-chan AxisEvent {
 	return h.axisCh
-}
-
-func (h *HID) registerButton(button uint8) {
-	log.Printf("Button detected, idx: %v\n", button)
-}
-
-func (h *HID) registerAxis(axis uint8) {
-	log.Printf("Axis detected, idx: %v\n", axis)
 }
