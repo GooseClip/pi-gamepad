@@ -36,6 +36,7 @@ func main() {
 	gamepad.OnL1(func(event ButtonEvent) {
 		log.Printf("L1 %v\n", event)
 	}) // Default handle all events for this button
+
 	gamepad.OnR1(func(event ButtonEvent) {
 		switch event {
 		case UpEvent:

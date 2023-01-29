@@ -33,6 +33,7 @@ Simplified event-driven gamepad library for interacting with a Raspberry Pi - te
 	gamepad.OnL1(func(event ButtonEvent) {
 		log.Printf("L1 %v\n", event)
 	})
+	
 	gamepad.OnR1(func(event ButtonEvent) {
 		log.Printf("R1 %v\n", event)
 	})
