@@ -45,8 +45,8 @@ const (
 )
 
 type Input struct {
-	inputType  int
-	inputValue uint8
+	Type  int
+	Value uint8
 }
 
 type InputMapping map[Input]Resolved
@@ -440,8 +440,8 @@ func (g *Gamepad) handleEvents() {
 			}
 
 			resolved, ok := g.inputMapping[Input{
-				inputType:  InputTypeButton,
-				inputValue: event.Button,
+				Type:  InputTypeButton,
+				Value: event.Button,
 			}]
 			if !ok {
 				g.debugLn(fmt.Sprintf("Button unknown: %v\n", event.Button))
@@ -504,8 +504,8 @@ func (g *Gamepad) handleEvents() {
 
 		case event := <-g.device.OnAxis():
 			resolved, ok := g.inputMapping[Input{
-				inputType:  InputTypeAxis,
-				inputValue: event.Axis,
+				Type:  InputTypeAxis,
+				Value: event.Axis,
 			}]
 			if !ok {
 				g.debugLn(fmt.Sprintf("Button unknown: %v\n", event.Axis))
