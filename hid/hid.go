@@ -6,11 +6,14 @@ import (
 	"time"
 )
 
+type DriverName string
+
 type HID struct {
 	ctx        context.Context
 	osEventsCh chan osEvent
 	buttonCh   chan ButtonEvent
 	axisCh     chan AxisEvent
+	Driver     DriverName
 }
 
 type ButtonEvent struct {

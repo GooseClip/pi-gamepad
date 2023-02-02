@@ -51,9 +51,7 @@ type Input struct {
 
 type InputMapping map[Input]Resolved
 
-type DriverName string
-
-var DriverMapping = map[DriverName]InputMapping{
+var DriverMapping = map[hid.DriverName]InputMapping{
 	// Ubuntu 22.04 arm64
 	"Microsoft X-Box 360 pad": {
 		//CrossButton:               0,
@@ -226,28 +224,10 @@ type option func(*Gamepad)
 
 func NewGamepad(ctx context.Context, opts ...option) (*Gamepad, error) {
 	ctx, cancel := context.WithCancel(ctx)
-
-	var driver DriverName
-	deviceIndex := -1
-	for i := 0; i < 5; i++ {
-		exists := hid.DeviceExists(i)
-		if exists {
-			if n, ok := isGamepad(i); ok {
-				driver = n
-				deviceIndex = i
-				break
-			}
-		}
-	}
-	if deviceIndex == -1 {
-		cancel()
-		return nil, errors.New("cannot find device")
-	}
-
-	device := hid.Connect(ctx, deviceIndex)
+	device := hid.Connect(ctx)
 	if device == nil {
 		cancel()
-		return nil, fmt.Errorf("failed to connect with device: js%v", deviceIndex)
+		return nil, fmt.Errorf("failed to connect with device")
 	}
 
 	g := &Gamepad{
@@ -257,7 +237,7 @@ func NewGamepad(ctx context.Context, opts ...option) (*Gamepad, error) {
 		axisCache:     make(map[Resolved]int),
 		clickDuration: defaultClickDuration,
 		holdDuration:  defaultHoldDuration,
-		inputMapping:  DriverMapping[driver],
+		inputMapping:  DriverMapping[device.Driver],
 	}
 
 	for _, o := range opts {
@@ -566,7 +546,7 @@ func (g *Gamepad) handleEvents() {
 	}
 }
 
-func isGamepad(idx int) (DriverName, bool) {
+func isGamepad(idx int) (hid.DriverName, bool) {
 	d, err := os.ReadFile(fmt.Sprintf("/sys/class/input/js%v/device/name", idx))
 	if err != nil {
 		log.Printf("Error checking device name, err: %v", err)

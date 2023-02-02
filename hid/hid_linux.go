@@ -1,6 +1,3 @@
-//go:build linux
-// +build linux
-
 package hid
 
 import (
@@ -12,7 +9,6 @@ import (
 	"time"
 )
 
-// Linux spec: https://www.kernel.org/doc/Documentation/input/joystick-api.txt
 type osEvent struct {
 	Time  uint32
 	Value int16
@@ -20,17 +16,36 @@ type osEvent struct {
 	Index uint8
 }
 
+// Linux spec: https://www.kernel.org/doc/Documentation/input/joystick-api.txt
+
 const MaxValue = 1<<15 - 1
 
 var lastTimestamp uint32
 
-func DeviceExists(index int) bool {
+func deviceExists(index int) bool {
 	_, err := os.Stat(fmt.Sprintf("/dev/input/js%v", index))
 	return err == nil
 }
 
 // Connect to device by index found in /dev/input/js*
 func Connect(ctx context.Context, index int) (d *HID) {
+	var driver DriverName
+	deviceIndex := -1
+	for i := 0; i < 5; i++ {
+		exists := deviceExists(i)
+		if exists {
+			if n, ok := isGamepad(i); ok {
+				driver = n
+				deviceIndex = i
+				break
+			}
+		}
+	}
+	if deviceIndex == -1 {
+		cancel()
+		return nil, errors.New("cannot find device")
+	}
+
 	r, e := os.OpenFile(fmt.Sprintf("/dev/input/js%v", index), os.O_RDWR, 0)
 	if e != nil {
 		return nil
