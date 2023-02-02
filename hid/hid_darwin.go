@@ -14,44 +14,36 @@ const MaxValue = 1<<15 - 1
 var firstTimestamp time.Time
 
 // Connect to device by index found in /dev/input/js*
-func Connect(c context.Context) (d *HID) {
+func Connect(c context.Context) (*HID, error) {
 	// Initialize a new Context.
 	ctx := gousb.NewContext()
 
 	// Open any device with a given VID/PID using a convenience function.
 	dev, err := ctx.OpenDeviceWithVIDPID(0x045e, 0x028e)
 	if err != nil {
-		log.Fatalf("Could not open a device: %v", err)
+		return nil, fmt.Errorf("could not open a device: %v", err)
 	}
 
-	fmt.Println("Opened device")
+	log.Printf("Opened device: %v", dev)
 
 	// Switch the configuration to #1
 	cfg, err := dev.Config(1)
 	if err != nil {
-		log.Fatalf("%s.Config(1): %v", dev, err)
+		return nil, fmt.Errorf("invalid config number for device: %v", err)
 	}
 
 	intf, err := cfg.Interface(0, 0)
 	if err != nil {
-		log.Fatalf("%s.Interface(0, 0): %v", cfg, err)
+		return nil, fmt.Errorf("invalid interface number for device: %v", err)
 	}
-
-	// Claim the default interface using a convenience function.
-	// The default interface is always #0 alt #0 in the currently active
-	// config.
-	intf, done, err := dev.DefaultInterface()
-	if err != nil {
-		panic(err)
-	}
-	defer done()
 
 	in, err := intf.InEndpoint(1)
 	if err != nil {
-		panic(err)
+		return nil, fmt.Errorf("invalid input endpoint for device: %v", err)
 	}
 
-	d = NewHID(c)
+	d := newHID(c)
+	d.Driver = "MacOS"
 
 	// Clean up on context done
 	go func() {
@@ -67,7 +59,7 @@ func Connect(c context.Context) (d *HID) {
 
 	// Read initial events from gamepad
 	firstTimestamp = time.Now()
-	return d
+	return d, nil
 }
 
 type osEvent struct {
@@ -77,169 +69,253 @@ type osEvent struct {
 	Index uint8
 }
 
-type input struct {
+type cache struct {
+	startBtn  bool
+	selectBtn bool
+	ljBtn     bool
+	rjBtn     bool
+	lpadAxis  bool
+	rpadAxis  bool
+	upadAxis  bool
+	dpadAxis  bool
+	xBtn      bool
+	oBtn      bool
+	sBtn      bool
+	tBtn      bool
+	l1Btn     bool
+	r1Btn     bool
+	analogBtn bool
+	l2Axis    bool
+	r2Axis    bool
+	ljXAxis   bool
+	ljYAxis   bool
+	rjXAxis   bool
+	rjYAxis   bool
 }
 
-// Header 0014
-func readDeviceInput(in *gousb.InEndpoint, c chan osEvent) {
+func (c *cache) buttonEdge(b byte, want byte, cache *bool) (eventType, uint8) {
+	if b == want {
+		if !*cache {
+			// Rising edge
+			*cache = true
+			return buttonEventType, 1
+		}
+	} else if *cache {
+		// Falling edge
+		*cache = false
+		return buttonEventType, 0
+	}
+
+	return invalidEventType, 0
+}
+
+func (c *cache) axisEdge(val int16, cache *bool) (eventType, int16) {
+	if val != 0 {
+		//if !*cache {
+		// Rising edge
+		*cache = true
+		return axisEventType, val
+		//}
+	} else if *cache {
+		// Falling edge
+		*cache = false
+		return axisEventType, 0
+	}
+
+	return invalidEventType, 0
+}
+
+func emit(ch chan osEvent, eventType eventType, index uint8, value int16) {
+	ev := osEvent{
+		Time:  uint32(time.Since(firstTimestamp).Milliseconds()),
+		Value: value,
+		Type:  uint8(eventType),
+		Index: index,
+	}
+
+	ch <- ev
+}
+
+// Values which will be used to map in gamepad.go
+const (
+	startButtonIndex = iota + 1
+	selectButtonIndex
+	ljButtonIndex
+	rjButtonIndex
+	dpadXAxisIndex
+	dpadYAxisIndex
+	crossButtonIndex
+	circleButtonIndex
+	squareButtonIndex
+	triangleButtonIndex
+	l1ButtonIndex
+	r1ButtonIndex
+	analogButtonIndex
+	l2AxisIndex
+	r2AxisIndex
+	ljxAxisIndex
+	ljyAxisIndex
+	rjxAxisIndex
+	rjyAxisIndex
+)
+
+func readDeviceInput(in *gousb.InEndpoint, ch chan osEvent) {
+	c := cache{}
 	buf := make([]byte, in.Desc.MaxPacketSize)
 	for {
 
 		readBytes, err := in.Read(buf)
 		if err != nil {
-			log.Printf("Read error: %v", err)
-			time.Sleep(time.Second)
-			continue
+			log.Fatalf("Read error: %v", err)
 		}
 
 		if readBytes == 0 {
-			log.Fatalf("IN endpoint returned 0 bytes of data.")
+			log.Fatalf("Device returned 0 bytes of data.")
 		}
 
-		// First 2 bytes are header
-		fmt.Printf("Buf: %x\n", buf)
-
-		var eventType uint8
 		// byte 2 MSB
 		b2msb := buf[2] >> 4
 		// Start = 1
-		if b2msb == 1 {
-			fmt.Println("Start")
-			eventType = ButtonEventType
+		if ev, v := c.buttonEdge(b2msb, 1, &c.startBtn); ev != invalidEventType {
+			emit(ch, ev, startButtonIndex, int16(v))
 		}
+
 		// Select = 2
-		if b2msb == 2 {
-			fmt.Println("Select")
-			eventType = ButtonEventType
+		if ev, v := c.buttonEdge(b2msb, 2, &c.selectBtn); ev != invalidEventType {
+			emit(ch, ev, selectButtonIndex, int16(v))
 		}
+
 		// LJ = 4
-		if b2msb == 4 {
-			fmt.Println("LJ")
-			eventType = ButtonEventType
+		if ev, v := c.buttonEdge(b2msb, 4, &c.ljBtn); ev != invalidEventType {
+			emit(ch, ev, ljButtonIndex, int16(v))
 		}
+
 		// RJ = 8
-		if b2msb == 8 {
-			fmt.Println("RJ")
-			eventType = ButtonEventType
+		if ev, v := c.buttonEdge(b2msb, 8, &c.rjBtn); ev != invalidEventType {
+			emit(ch, ev, rjButtonIndex, int16(v))
 		}
 
 		// byte 3 - DPAD
 		b2lsb := buf[2] & 0xf
+
 		// Left
-		if b2lsb == 4 {
-			fmt.Println("Left DPAD")
-			eventType = AxisEventType
+		if ev, v := c.buttonEdge(b2lsb, 4, &c.lpadAxis); ev != invalidEventType {
+			if v == 1 {
+				emit(ch, axisEventType, dpadXAxisIndex, -MaxValue)
+			} else {
+				emit(ch, axisEventType, dpadXAxisIndex, 0)
+			}
 		}
+
 		// Right
-		if b2lsb == 8 {
-			fmt.Println("Right DPAD")
-			eventType = AxisEventType
+		if ev, v := c.buttonEdge(b2lsb, 8, &c.rpadAxis); ev != invalidEventType {
+			if v == 1 {
+				emit(ch, axisEventType, dpadXAxisIndex, MaxValue)
+			} else {
+				emit(ch, axisEventType, dpadXAxisIndex, 0)
+			}
 		}
+
 		// Up
-		if b2lsb == 1 {
-			fmt.Println("Up DPAD")
-			eventType = AxisEventType
+		if ev, v := c.buttonEdge(b2lsb, 1, &c.upadAxis); ev != invalidEventType {
+			if v == 1 {
+				emit(ch, axisEventType, dpadYAxisIndex, MaxValue)
+			} else {
+				emit(ch, axisEventType, dpadYAxisIndex, 0)
+			}
 		}
+
 		// Down
-		if b2lsb == 2 {
-			fmt.Println("Down DPAD")
-			eventType = AxisEventType
+		if ev, v := c.buttonEdge(b2lsb, 2, &c.dpadAxis); ev != invalidEventType {
+			if v == 1 {
+				emit(ch, axisEventType, dpadYAxisIndex, -MaxValue)
+			} else {
+				emit(ch, axisEventType, dpadYAxisIndex, 0)
+			}
 		}
 
 		// byte 4 MSB - Actions
 		b3msb := buf[3] >> 4
 		// X
-		if b3msb == 1 {
-			fmt.Println("X")
-			eventType = ButtonEventType
+		if ev, v := c.buttonEdge(b3msb, 1, &c.xBtn); ev != invalidEventType {
+			emit(ch, ev, crossButtonIndex, int16(v))
+		}
 
-		}
 		// O
-		if b3msb == 2 {
-			fmt.Println("O")
-			eventType = ButtonEventType
+		if ev, v := c.buttonEdge(b3msb, 2, &c.oBtn); ev != invalidEventType {
+			emit(ch, ev, circleButtonIndex, int16(v))
 		}
+
 		// []
-		if b3msb == 4 {
-			fmt.Println("[]")
-			eventType = ButtonEventType
+		if ev, v := c.buttonEdge(b3msb, 4, &c.sBtn); ev != invalidEventType {
+			emit(ch, ev, squareButtonIndex, int16(v))
 		}
+
 		// /\
-		if b3msb == 8 {
-			fmt.Println("/\\")
-			eventType = ButtonEventType
+		if ev, v := c.buttonEdge(b3msb, 8, &c.tBtn); ev != invalidEventType {
+			emit(ch, ev, triangleButtonIndex, int16(v))
 		}
 
 		// byte 5 LSB - Top triggers + Analog
 		b3lsb := buf[3] & 0xf
 		// L1
-		if b3lsb == 1 {
-			fmt.Println("L1")
-			eventType = ButtonEventType
+		if ev, v := c.buttonEdge(b3lsb, 1, &c.l1Btn); ev != invalidEventType {
+			emit(ch, ev, l1ButtonIndex, int16(v))
 		}
+
 		// R1
-		if b3lsb == 2 {
-			fmt.Println("R1")
-			eventType = ButtonEventType
+		if ev, v := c.buttonEdge(b3lsb, 2, &c.r1Btn); ev != invalidEventType {
+			emit(ch, ev, r1ButtonIndex, int16(v))
 		}
+
 		// Analog
-		if b3lsb == 4 {
-			fmt.Println("Analog")
-			eventType = ButtonEventType
+		if ev, v := c.buttonEdge(b3lsb, 4, &c.analogBtn); ev != invalidEventType {
+			emit(ch, ev, analogButtonIndex, int16(v))
 		}
 
 		// byte 4 - L2
 		b4 := buf[4]
-		if b4 > 0 {
-			fmt.Println("L2")
-			eventType = AxisEventType // L2 treated as axis
+		if ev, v := c.buttonEdge(b4, 255, &c.l2Axis); ev != invalidEventType {
+			if v > 0 {
+				emit(ch, axisEventType, l2AxisIndex, MaxValue)
+			} else {
+				emit(ch, axisEventType, l2AxisIndex, 0)
+			}
 		}
 
 		// byte 5 - R2
 		b5 := buf[5]
-		if b5 > 0 {
-			fmt.Println("R2")
-			eventType = AxisEventType // R2 treated as axis
+		if ev, v := c.buttonEdge(b5, 255, &c.r2Axis); ev != invalidEventType {
+			if v > 0 {
+				emit(ch, axisEventType, r2AxisIndex, MaxValue)
+			} else {
+				emit(ch, axisEventType, r2AxisIndex, 0)
+			}
 		}
 
 		// byte 6 + 7
 		b67 := int16(binary.LittleEndian.Uint16(buf[6:8]))
-		if b67 != 0 {
-			fmt.Printf("Left joy X: %v\n", b67)
-			eventType = AxisEventType
+		if ev, v := c.axisEdge(b67, &c.ljXAxis); ev != invalidEventType {
+			emit(ch, ev, ljxAxisIndex, v)
 		}
 
 		// byte 8 + 9
 		b89 := int16(binary.LittleEndian.Uint16(buf[8:10]))
-		if b89 != 0 {
-			fmt.Printf("Left joy Y: %v\n", b89)
-			eventType = AxisEventType
+		if ev, v := c.axisEdge(b89, &c.ljYAxis); ev != invalidEventType {
+			emit(ch, ev, ljyAxisIndex, v)
 		}
 
 		// byte 10 + 11
 		b1011 := int16(binary.LittleEndian.Uint16(buf[10:12]))
-		if b1011 != 0 {
-			fmt.Printf("Right joy X: %v\n", b1011)
-			eventType = AxisEventType
+		if ev, v := c.axisEdge(b1011, &c.rjXAxis); ev != invalidEventType {
+			emit(ch, ev, rjxAxisIndex, v)
 		}
 
 		// byte 11 + 12
 		b1213 := int16(binary.LittleEndian.Uint16(buf[12:14]))
-		if b1213 != 0 {
-			fmt.Printf("Right joy Y: %v\n", b1213)
-			eventType = AxisEventType
+		if ev, v := c.axisEdge(b1213, &c.rjYAxis); ev != invalidEventType {
+			emit(ch, ev, rjyAxisIndex, v)
 		}
-
-		time.Sleep(time.Millisecond * 200)
-
-		//ev := osEvent{
-		//	Time:  uint32(time.Since(firstTimestamp).Milliseconds()),
-		//	Value: 0,
-		//	Type:  eventType,
-		//	Index: 0,
-		//}
-		log.Println("Event type", eventType)
-		//c <- ev
 	}
 }
 

@@ -4,138 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/gooseclip/pi-gamepad/hid"
+	. "github.com/gooseclip/pi-gamepad/hid"
 	"log"
-	"os"
-	"strings"
 	"time"
 )
-
-type Resolved int
-
-const (
-	// Buttons
-	CrossButton    Resolved = iota //  X
-	CircleButton                   // ()
-	SquareButton                   // []
-	TriangleButton                 // /\
-	L1Button
-	R1Button
-	SelectButton
-	StartButton
-	AnalogButton
-	LeftJoyButton
-	RightJoyButton
-	// Axis
-	DPadXAxis
-	DPadYAxis
-	LeftJoyXAxis
-	LeftJoyYAxis
-	RightJoyXAxis
-	RightJoyYAxis
-	L2Axis
-	R2Axis
-)
-
-//var KnownNames []string = []string{"Microsoft X-Box 360 pad", "SHANWAN Android Gamepad"}
-
-const (
-	InputTypeButton int = iota
-	InputTypeAxis
-)
-
-type Input struct {
-	Type  int
-	Value uint8
-}
-
-type InputMapping map[Input]Resolved
-
-var DriverMapping = map[hid.DriverName]InputMapping{
-	// Ubuntu 22.04 arm64
-	"Microsoft X-Box 360 pad": {
-		//CrossButton:               0,
-		Input{InputTypeButton, 0}: CrossButton,
-		//CircleButton:              1,
-		Input{InputTypeButton, 1}: CircleButton,
-		//SquareButton:              2,
-		Input{InputTypeButton, 2}: SquareButton,
-		//TriangleButton:            3,
-		Input{InputTypeButton, 3}: TriangleButton,
-		//L1Button:                  4,
-		Input{InputTypeButton, 4}: L1Button,
-		//R1Button:                  5,
-		Input{InputTypeButton, 5}: R1Button,
-		//SelectButton:              6,
-		Input{InputTypeButton, 6}: SelectButton,
-		//StartButton:               7,
-		Input{InputTypeButton, 7}: StartButton,
-		//AnalogButton:              8,
-		Input{InputTypeButton, 8}: AnalogButton,
-		//LeftJoyButton:             9,
-		Input{InputTypeButton, 9}: LeftJoyButton,
-		//RightJoyButton:            10,
-		Input{InputTypeButton, 10}: RightJoyButton,
-		//DPadXAxis:                 6,
-		Input{InputTypeAxis, 6}: DPadXAxis,
-		//DPadYAxis:                 7,
-		Input{InputTypeAxis, 7}: DPadYAxis,
-		//LeftJoyXAxis:              0,
-		Input{InputTypeAxis, 0}: LeftJoyXAxis,
-		//LeftJoyYAxis:              1,
-		Input{InputTypeAxis, 1}: LeftJoyYAxis,
-		//RightJoyXAxis:             3,
-		Input{InputTypeAxis, 3}: RightJoyXAxis,
-		//RightJoyYAxis:             4,
-		Input{InputTypeAxis, 4}: RightJoyYAxis,
-		//L2Axis:                    2,
-		Input{InputTypeAxis, 2}: L2Axis,
-		//R2Axis:                    5,
-		Input{InputTypeAxis, 5}: R2Axis,
-	},
-
-	// Raspberry pi 4 - Ubuntu 22.10
-	"SHANWAN Android Gamepad": {
-		//CrossButton:               0,
-		Input{InputTypeButton, 0}: CrossButton,
-		//CircleButton:              1,
-		Input{InputTypeButton, 1}: CircleButton,
-		//SquareButton:              2,
-		Input{InputTypeButton, 3}: SquareButton,
-		//TriangleButton:            3,
-		Input{InputTypeButton, 4}: TriangleButton,
-		//L1Button:                  4,
-		Input{InputTypeButton, 6}: L1Button,
-		//R1Button:                  5,
-		Input{InputTypeButton, 7}: R1Button,
-		//SelectButton:              6,
-		Input{InputTypeButton, 10}: SelectButton,
-		//StartButton:               7,
-		Input{InputTypeButton, 11}: StartButton,
-		//AnalogButton:              8,
-		Input{InputTypeButton, 12}: AnalogButton,
-		//LeftJoyButton:             9,
-		Input{InputTypeButton, 13}: LeftJoyButton,
-		//RightJoyButton:            10,
-		Input{InputTypeButton, 14}: RightJoyButton,
-		//DPadXAxis:                 6,
-		Input{InputTypeAxis, 6}: DPadXAxis,
-		//DPadYAxis:                 7,
-		Input{InputTypeAxis, 7}: DPadYAxis,
-		//LeftJoyXAxis:              0,
-		Input{InputTypeAxis, 0}: LeftJoyXAxis,
-		//LeftJoyYAxis:              1,
-		Input{InputTypeAxis, 1}: LeftJoyYAxis,
-		//RightJoyXAxis:             3,
-		Input{InputTypeAxis, 2}: RightJoyXAxis,
-		//RightJoyYAxis:             4,
-		Input{InputTypeAxis, 3}: RightJoyYAxis,
-		//L2Axis:                    2,
-		Input{InputTypeAxis, 5}: L2Axis,
-		//R2Axis:                    5,
-		Input{InputTypeAxis, 4}: R2Axis,
-	},
-}
 
 type ButtonPosition int
 
@@ -175,7 +47,7 @@ const (
 type Gamepad struct {
 	ctx           context.Context
 	cancel        context.CancelFunc
-	device        *hid.HID
+	device        *HID
 	invertY       bool
 	axisCache     map[Resolved]int
 	clickDuration time.Duration
@@ -224,8 +96,8 @@ type option func(*Gamepad)
 
 func NewGamepad(ctx context.Context, opts ...option) (*Gamepad, error) {
 	ctx, cancel := context.WithCancel(ctx)
-	device := hid.Connect(ctx)
-	if device == nil {
+	device, err := Connect(ctx)
+	if err != nil {
 		cancel()
 		return nil, fmt.Errorf("failed to connect with device")
 	}
@@ -546,21 +418,6 @@ func (g *Gamepad) handleEvents() {
 	}
 }
 
-func isGamepad(idx int) (hid.DriverName, bool) {
-	d, err := os.ReadFile(fmt.Sprintf("/sys/class/input/js%v/device/name", idx))
-	if err != nil {
-		log.Printf("Error checking device name, err: %v", err)
-		return "", false
-	}
-	name := strings.TrimSpace(string(d))
-	for k, _ := range DriverMapping {
-		if name == string(k) {
-			return k, true
-		}
-	}
-	return "", false
-}
-
 func (g *Gamepad) emitDirection(handler directionHandler, xIndex, yIndex Resolved) error {
 	if handler == nil {
 		return errors.New("handler not assigned")
@@ -572,7 +429,23 @@ func (g *Gamepad) emitDirection(handler directionHandler, xIndex, yIndex Resolve
 	if g.invertY {
 		y = y * -1
 	}
-	handler(float32(x)/hid.MaxValue, float32(y)/hid.MaxValue) // TODO scale to float
+	xx := float32(x) / MaxValue
+	yy := float32(y) / MaxValue
+
+	if xx < -1 {
+		xx = -1
+	}
+	if xx > 1 {
+		xx = 1
+	}
+
+	if yy < -1 {
+		yy = -1
+	}
+	if yy > 1 {
+		yy = 1
+	}
+	handler(xx, yy) // TODO scale to float
 	return nil
 }
 

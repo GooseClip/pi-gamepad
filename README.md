@@ -30,57 +30,57 @@ Simplified event-driven gamepad library for interacting with a Raspberry Pi - te
 	})
 
 	// Handle triggers
-	gamepad.OnL1(func(event ButtonEvent) {
+	gamepad.OnL1(func(event ButtonCallbackType) {
 		log.Printf("L1 %v\n", event)
 	})
 	
-	gamepad.OnR1(func(event ButtonEvent) {
+	gamepad.OnR1(func(event ButtonCallbackType) {
 		log.Printf("R1 %v\n", event)
 	})
 
-	gamepad.OnL2(func(event ButtonEvent) {
+	gamepad.OnL2(func(event ButtonCallbackType) {
 		log.Printf("L2 %v\n", event)
 	})
 
-	gamepad.OnR2(func(event ButtonEvent) {
+	gamepad.OnR2(func(event ButtonCallbackType) {
 		log.Printf("R2 %v\n", event)
 	})
 
 	// Handle action buttons
-	gamepad.OnCross(func(event ButtonEvent) {
+	gamepad.OnCross(func(event ButtonCallbackType) {
 		log.Printf("Cross %v\n", event)
 	})
 
-	gamepad.OnCircle(func(event ButtonEvent) {
+	gamepad.OnCircle(func(event ButtonCallbackType) {
 		log.Printf("Circle %v\n", event)
 	})
 
-	gamepad.OnSquare(func(event ButtonEvent) {
+	gamepad.OnSquare(func(event ButtonCallbackType) {
 		log.Printf("Square %v\n", event)
 	})
 
-	gamepad.OnTriangle(func(event ButtonEvent) {
+	gamepad.OnTriangle(func(event ButtonCallbackType) {
 		log.Printf("Triangle %v\n", event)
 	})
 
 	// Handle special buttons
-	gamepad.OnSelect(func(event ButtonEvent) {
+	gamepad.OnSelect(func(event ButtonCallbackType) {
 		log.Printf("Select %v\n", event)
 	})
 
-	gamepad.OnStart(func(event ButtonEvent) {
+	gamepad.OnStart(func(event ButtonCallbackType) {
 		log.Printf("Start %v\n", event)
 	})
 
-	gamepad.OnAnalog(func(event ButtonEvent) {
+	gamepad.OnAnalog(func(event ButtonCallbackType) {
 		log.Printf("Analog %v\n", event)
 	})
 
-	gamepad.OnLJ(func(event ButtonEvent) {
+	gamepad.OnLJ(func(event ButtonCallbackType) {
 		log.Printf("Left Joystick Click %v\n", event)
 	})
 
-	gamepad.OnRJ(func(event ButtonEvent) {
+	gamepad.OnRJ(func(event ButtonCallbackType) {
 		log.Printf("Right Joystick Click %v\n", event)
 	})
 

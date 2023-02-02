@@ -3,9 +3,12 @@ package hid
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
+	"log"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -27,9 +30,25 @@ func deviceExists(index int) bool {
 	return err == nil
 }
 
+func isGamepad(idx int) (driverName, bool) {
+	d, err := os.ReadFile(fmt.Sprintf("/sys/class/input/js%v/device/name", idx))
+	if err != nil {
+		log.Printf("Error checking device name, err: %v", err)
+		return "", false
+	}
+	name := strings.TrimSpace(string(d))
+	for k, _ := range DriverMapping {
+		if name == string(k) {
+			return k, true
+		}
+	}
+	return "", false
+}
+
 // Connect to device by index found in /dev/input/js*
-func Connect(ctx context.Context, index int) (d *HID) {
-	var driver DriverName
+func Connect(ctx context.Context) (*HID, error) {
+
+	var driver driverName
 	deviceIndex := -1
 	for i := 0; i < 5; i++ {
 		exists := deviceExists(i)
@@ -42,15 +61,15 @@ func Connect(ctx context.Context, index int) (d *HID) {
 		}
 	}
 	if deviceIndex == -1 {
-		cancel()
 		return nil, errors.New("cannot find device")
 	}
 
-	r, e := os.OpenFile(fmt.Sprintf("/dev/input/js%v", index), os.O_RDWR, 0)
+	r, e := os.OpenFile(fmt.Sprintf("/dev/input/js%v", deviceIndex), os.O_RDWR, 0)
 	if e != nil {
-		return nil
+		return nil, e
 	}
-	d = NewHID(ctx)
+	d := newHID(ctx)
+	d.Driver = driver
 
 	// Clean up on context done
 	go func() {
@@ -63,7 +82,7 @@ func Connect(ctx context.Context, index int) (d *HID) {
 
 	// Read initial events from gamepad
 	d.mapInitalEvents()
-	return d
+	return d, nil
 }
 
 func (h *HID) mapInitalEvents() {
