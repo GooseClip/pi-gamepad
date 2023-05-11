@@ -157,40 +157,54 @@ func newHID(ctx context.Context) *HID {
 }
 
 // handleEvents waits on the HID.OSEvents channel (so is blocking), then puts any events matching onto any registered channel(s).
+// This function handles HID events
 func (h *HID) handleEvents() {
 	for {
 		select {
+		// If the context is done, return
 		case <-h.ctx.Done():
 			return
+		// If there is an event on the OS events channel
 		case evt, ok := <-h.osEventsCh:
+			// If the channel is closed, return
 			if !ok {
 				return
 			}
 
+			// Determine the type of event
 			switch eventType(evt.Type) {
+			// If it's a button event
 			case buttonEventType:
+				// Try to send the event to the button channel
 				select {
+				// If the event is successfully sent
 				case h.buttonCh <- buttonEvent{
 					When:   toElapsed(evt.Time),
 					Button: evt.Index,
 					Value:  evt.Value,
 				}:
+				// If the button channel is full, drop the event and log a message
 				case <-time.NewTimer(time.Millisecond * 20).C:
 					log.Printf("Button event dropped, index: %v", evt.Index)
 				}
+			// If it's an axis event
 			case axisEventType:
+				// Try to send the event to the axis channel
 				select {
+				// If the event is successfully sent
 				case h.axisCh <- axisEvent{
 					When:  toElapsed(evt.Time),
 					Axis:  evt.Index,
 					Value: evt.Value,
 				}:
+				// If the axis channel is full, drop the event and log a message
 				case <-time.NewTimer(time.Millisecond * 20).C:
 					log.Printf("Axis event dropped, index: %v", evt.Index)
 				}
 			}
 		}
 	}
+}
 }
 
 func (h *HID) OnButton() <-chan buttonEvent {
